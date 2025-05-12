@@ -1,104 +1,105 @@
-#include <Arduino.h>
-#include <WiFi.h>
-#include <DHT.h>
-#include <Firebase_ESP_Client.h>  
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include "Adafruit_HTU21DF.h"
+#include <Adafruit_APDS9960.h>
 
-// DEFINIÇÕES 
-#define WIFI_SSID "uaifai-tiradentes"
-#define WIFI_PASSWORD "bemvindoaocesar"
+// OLED
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-#define API_KEY "CBuc7JuanfWmscKLyIAJyOBoTA0k46PzBar8FJu4" 
-#define DATABASE_URL "https://climatizarecife-2025-default-rtdb.firebaseio.com"
+// Sensor de temperatura/umidade
+Adafruit_HTU21DF htu;
 
-// Pinos físicos conectados 
-#define DHTPIN        13  // DHT11 dados conectado ao GPIO13 (D13)
-#define DHTTYPE       DHT11
+// Sensor de gestos APDS9960
+Adafruit_APDS9960 apds;
 
-#define TEMP_POT_PIN  32    // Potenciômetro de temperatura simulada no GPIO4 (D2)
-#define HUM_POT_PIN   33    // Potenciômetro de umidade simulada no GPIO2 (D4)
-#define PRES_POT_PIN  34   // Potenciômetro de presença simulada no GPIO15 (D15)
+// Pinos do LED RGB do sensor de som
+#define RED_LED_PIN    19  // R
+#define GREEN_LED_PIN  23  // G
+#define BLUE_LED_PIN   18  // B
 
-#define FAN_LED_PIN   25     // LED/futura ventoinha no GPIO5
+bool presencaDetectada = false;
 
-// OBJETOS 
-DHT dht(DHTPIN, DHTTYPE);
-FirebaseData fbdo;
-FirebaseAuth auth;
-FirebaseConfig config;
-
-unsigned long previousMillis = 0;
-const unsigned long interval = 2000;  // a cada 2 segundos
-
-// SETUP
 void setup() {
-  Serial.begin(115200); // Taxa de transmissão de dados por segundo
+  Serial.begin(115200);
 
-  pinMode(FAN_LED_PIN, OUTPUT);
-  digitalWrite(FAN_LED_PIN, LOW);
+  // Inicializa LEDs RGB
+  pinMode(RED_LED_PIN, OUTPUT);
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  pinMode(BLUE_LED_PIN, OUTPUT);
+  digitalWrite(RED_LED_PIN, LOW);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, LOW);
 
-  dht.begin();
-
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  Serial.print("Conectando ao WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  Wire.begin();
+  
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("Falha no display OLED!"));
+    while (true);
   }
-  Serial.println("\nWiFi conectado");
 
-  // Configuração Firebase
-  config.api_key = API_KEY;
-  config.database_url = DATABASE_URL;
+  if (!htu.begin()) {
+    Serial.println("Sensor HTU21D não detectado!");
+    while (true);
+  }
 
-  // Sem autenticação de usuário, usar anônimo
-  auth.user.email = "";
-  auth.user.password = "";
+  if (!apds.begin()) {
+    Serial.println("Sensor APDS-9960 não detectado!");
+    while (true);
+  }
 
-  Firebase.begin(&config, &auth);
-  Firebase.reconnectWiFi(true);
+  apds.enableGesture(true);  // Garante que gestos estejam ativados
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
 }
 
-// LOOP 
 void loop() {
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
+  // Leitura contínua de gestos
+  if (apds.gestureValid()) {
+    uint8_t gesture = apds.readGesture();
 
-    // Leitura do DHT11
-    float tempReal = dht.readTemperature();
-    float humReal = dht.readHumidity();
+    switch (gesture) {
+      case APDS9960_UP:
+      case APDS9960_LEFT:
+        presencaDetectada = false;
+        Serial.println("Gesto: AUSENTE (UP/LEFT)");
+        break;
 
-    // Leitura dos potenciômetros
-    int rawTemp = analogRead(TEMP_POT_PIN);
-    int rawHum = analogRead(HUM_POT_PIN);
-    int rawPres = analogRead(PRES_POT_PIN);
+      case APDS9960_DOWN:
+      case APDS9960_RIGHT:
+        presencaDetectada = true;
+        Serial.println("Gesto: PRESENÇA (DOWN/RIGHT)");
+        break;
 
-    // Exibição dos valores brutos no Serial Monitor
-    Serial.printf("RawTemp: %d | RawHum: %d | RawPres: %d\n", rawTemp, rawHum, rawPres);
-
-    // Conversão para faixas realistas com ajustes nas faixas de mapeamento
-    float tempSim = map(rawTemp, 0, 4095, 0, 100); // Faixa de 0°C a 100°C
-    float humSim = map(rawHum, 0, 4095, 0, 100);   // Faixa de 0% a 100% de umidade
-
-    // Determinação de presença baseada no valor do potenciômetro de presença
-    bool presenca = rawPres > 2000; // Se o valor lido for maior que 2000, há presença
-
-    // Debug
-    Serial.printf("TempReal: %.1f°C | HumReal: %.1f%% | TempSim: %.1f°C | HumSim: %.1f%% | Presença: %s\n",
-                  tempReal, humReal, tempSim, humSim, presenca ? "SIM" : "NÃO");
-
-    // Envio para Firebase
-    Firebase.RTDB.setFloat(&fbdo, "/sensores/temperatura_real", tempReal);
-    Firebase.RTDB.setFloat(&fbdo, "/sensores/umidade_real", humReal);
-    Firebase.RTDB.setFloat(&fbdo, "/sensores/temperatura_simulada", tempSim);
-    Firebase.RTDB.setFloat(&fbdo, "/sensores/umidade_simulada", humSim);
-    Firebase.RTDB.setBool(&fbdo, "/sensores/presenca_simulada", presenca);
-
-    // Lógica para acionar ventoinha (LED) com a nova condição
-    if (tempSim > 30 && humSim > 65) {
-      digitalWrite(FAN_LED_PIN, HIGH);  // Ventoinha (LED) ligado
-    } else {
-      digitalWrite(FAN_LED_PIN, LOW);   // Ventoinha (LED) desligado
+      default:
+        Serial.println("Gesto não reconhecido");
+        break;
     }
   }
+
+  // Leitura de sensores ambientais
+  float temp = htu.readTemperature();
+  float umid = htu.readHumidity();
+
+  bool ligarLED = (temp >= 23.0 && umid >= 60.0 && presencaDetectada);
+
+  // Controla o LED RGB (vermelho apenas)
+  digitalWrite(RED_LED_PIN, ligarLED ? HIGH : LOW);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, LOW);
+
+  // Atualiza display
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.printf("Temp: %.1f C\n", temp);
+  display.printf("Umid: %.1f %%\n", umid);
+  display.printf("Presenca: %s\n", presencaDetectada ? "Detectada" : "Nao");
+  display.printf("LED: %s", ligarLED ? "ON" : "OFF");
+  display.display();
+
+  delay(100);  // Atraso pequeno para manter responsividade
 }
