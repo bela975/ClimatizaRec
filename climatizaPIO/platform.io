@@ -8,10 +8,16 @@
 ; Please visit documentation for the other options and examples
 ; https://docs.platformio.org/page/projectconf.html
 
-[env:uno]
-platform = atmelavr
-board = uno
+[env:upesy_wroom]
+platform = espressif32
+board = upesy_wroom
 framework = arduino
+monitor_speed = 115200
 lib_deps = 
-    mobizt/Firebase ESP32 Client@^4.4.17
-    adafruit/DHT sensor library@^1.4.4
+	adafruit/Adafruit GFX Library@^1.11.9
+	adafruit/Adafruit SSD1306@^2.5.7
+	robocore/RoboCore - MMA8452Q@^1.0.0
+	adafruit/Adafruit HTU21DF Library@^1.0.4
+	adafruit/Adafruit APDS9960 Library@^1.1.5
+	arduino-libraries/NTPClient@^3.2.1
+	mobizt/Firebase ESP32 Client@^4.4.17
