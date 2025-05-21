@@ -119,27 +119,24 @@ void setup() {
 }
 
 void loop() {
-  if (apds.gestureValid()) {
-    uint8_t gesture = apds.readGesture();
-
-    switch (gesture) {
-      case APDS9960_UP:
-      case APDS9960_LEFT:
-        presencaDetectada = false;
-        Serial.println("Gesto: AUSENTE (UP/LEFT)");
-        break;
-
-      case APDS9960_DOWN:
-      case APDS9960_RIGHT:
-        presencaDetectada = true;
-        Serial.println("Gesto: PRESENÇA (DOWN/RIGHT)");
-        break;
-
-      default:
-        Serial.println("Gesto não reconhecido");
-        break;
-    }
+  uint8_t gesture = apds.readGesture();
+if (gesture != 0) {
+  switch (gesture) {
+    case APDS9960_UP:
+    case APDS9960_LEFT:
+      presencaDetectada = false;
+      Serial.println("Gesto: AUSENTE (UP/LEFT)");
+      break;
+    case APDS9960_DOWN:
+    case APDS9960_RIGHT:
+      presencaDetectada = true;
+      Serial.println("Gesto: PRESENCA (DOWN/RIGHT)");
+      break;
+    default:
+      Serial.println("Gesto nao reconhecido");
+      break;
   }
+}
 
   float temp = htu.readTemperature();
   float umid = htu.readHumidity();
