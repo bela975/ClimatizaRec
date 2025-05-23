@@ -9,8 +9,8 @@
 #include <FirebaseESP32.h> // BIBLIOTECA CORRETA PARA TOKEN LEGADO
 
 // === Wi-Fi ===
-#define WIFI_SSID "Claro_2202-B"
-#define WIFI_PASSWORD "lizie2024"
+#define WIFI_SSID "uaifai-tiradentes"
+#define WIFI_PASSWORD "bemvindoaocesar"
 
 // === Firebase ===
 #define DATABASE_URL "https://climatizarecife-2025-default-rtdb.firebaseio.com/"
@@ -29,6 +29,9 @@ Adafruit_APDS9960 apds;
 #define RED_LED_PIN    19
 #define GREEN_LED_PIN  23
 #define BLUE_LED_PIN   18
+
+// === FAN / RELÉ ===
+#define RELAY_PIN 21  // Pino conectado ao módulo relé
 
 // === Firebase ===
 FirebaseData firebaseData;
@@ -72,9 +75,12 @@ void setup() {
   pinMode(RED_LED_PIN, OUTPUT);
   pinMode(GREEN_LED_PIN, OUTPUT);
   pinMode(BLUE_LED_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);  // Configura relé como saída
+
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
+  digitalWrite(RELAY_PIN, LOW);  // Começa com o relé desligado
 
   Wire.begin();
 
@@ -120,32 +126,38 @@ void setup() {
 
 void loop() {
   uint8_t gesture = apds.readGesture();
-if (gesture != 0) {
-  switch (gesture) {
-    case APDS9960_UP:
-    case APDS9960_LEFT:
-      presencaDetectada = false;
-      Serial.println("Gesto: AUSENTE (UP/LEFT)");
-      break;
-    case APDS9960_DOWN:
-    case APDS9960_RIGHT:
-      presencaDetectada = true;
-      Serial.println("Gesto: PRESENCA (DOWN/RIGHT)");
-      break;
-    default:
-      Serial.println("Gesto nao reconhecido");
-      break;
+  if (gesture != 0) {
+    switch (gesture) {
+      case APDS9960_UP:
+      case APDS9960_LEFT:
+        presencaDetectada = false;
+        Serial.println("Gesto: AUSENTE (UP/LEFT)");
+        break;
+      case APDS9960_DOWN:
+      case APDS9960_RIGHT:
+        presencaDetectada = true;
+        Serial.println("Gesto: PRESENCA (DOWN/RIGHT)");
+        break;
+      default:
+        Serial.println("Gesto nao reconhecido");
+        break;
+    }
   }
-}
 
   float temp = htu.readTemperature();
   float umid = htu.readHumidity();
 
-  bool ligarLED = (temp >= 23.0 && umid >= 40.0 && presencaDetectada);
+  bool ligarLED = (temp >= 19.0 && umid >= 40.0 && presencaDetectada);
 
   digitalWrite(RED_LED_PIN, ligarLED ? HIGH : LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
+
+  if (ligarLED) {
+  digitalWrite(RELAY_PIN, LOW);   // Liga fan
+} else {
+  digitalWrite(RELAY_PIN, HIGH);  // Desliga fan
+}
 
   display.clearDisplay();
   display.setCursor(0, 0);
@@ -164,5 +176,5 @@ if (gesture != 0) {
 
   enviarDadosFirebase(temp, umid, presencaDetectada);
 
-delay(100);
+  delay(100);
 }
