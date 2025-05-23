@@ -9,8 +9,8 @@
 #include <FirebaseESP32.h> // BIBLIOTECA CORRETA PARA TOKEN LEGADO
 
 // === Wi-Fi ===
-#define WIFI_SSID "uaifai-tiradentes"
-#define WIFI_PASSWORD "bemvindoaocesar"
+#define WIFI_SSID "Galaxy A54 5G 3B44"
+#define WIFI_PASSWORD "teamobeijos"
 
 // === Firebase ===
 #define DATABASE_URL "https://climatizarecife-2025-default-rtdb.firebaseio.com/"
@@ -118,6 +118,13 @@ void setup() {
   Firebase.begin(&config, nullptr);
   Firebase.reconnectNetwork(true);
 
+  // Deleta todas as leituras anteriores no Firebase
+  if (Firebase.deleteNode(firebaseData, "/leituras")) {
+    Serial.println("Todas as leituras anteriores foram deletadas com sucesso.");
+  } else {
+    Serial.println("Falha ao deletar leituras anteriores: " + firebaseData.errorReason());
+  }
+
   timeClient.begin();
 
   delay(2000);
@@ -154,10 +161,10 @@ void loop() {
   digitalWrite(BLUE_LED_PIN, LOW);
 
   if (ligarLED) {
-  digitalWrite(RELAY_PIN, LOW);   // Liga fan
-} else {
-  digitalWrite(RELAY_PIN, HIGH);  // Desliga fan
-}
+    digitalWrite(RELAY_PIN, HIGH);   // Liga fan
+  } else {
+    digitalWrite(RELAY_PIN, LOW);  // Desliga fan
+  }
 
   display.clearDisplay();
   display.setCursor(0, 0);
@@ -176,5 +183,5 @@ void loop() {
 
   enviarDadosFirebase(temp, umid, presencaDetectada);
 
-  delay(100);
+  delay(100);
 }
