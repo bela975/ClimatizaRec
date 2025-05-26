@@ -2,7 +2,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "Adafruit_HTU21DF.h"
-#include <Adafruit_APDS9960.h>
+#include <SparkFun_APDS9960.h>
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -23,7 +23,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // === Sensores ===
 Adafruit_HTU21DF htu;
-Adafruit_APDS9960 apds;
+SparkFun_APDS9960 apds = SparkFun_APDS9960();  // Usando a SparkFun
 
 // === LED RGB ===
 #define RED_LED_PIN    19
@@ -31,7 +31,7 @@ Adafruit_APDS9960 apds;
 #define BLUE_LED_PIN   18
 
 // === FAN / RELÉ ===
-#define RELAY_PIN 21  // Pino conectado ao módulo relé
+#define RELAY_PIN 33  // Pino conectado ao módulo relé
 
 // === Firebase ===
 FirebaseData firebaseData;
@@ -75,12 +75,12 @@ void setup() {
   pinMode(RED_LED_PIN, OUTPUT);
   pinMode(GREEN_LED_PIN, OUTPUT);
   pinMode(BLUE_LED_PIN, OUTPUT);
-  pinMode(RELAY_PIN, OUTPUT);  // Configura relé como saída
+  pinMode(RELAY_PIN, OUTPUT);
 
   digitalWrite(RED_LED_PIN, LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
-  digitalWrite(RELAY_PIN, LOW);  // Começa com o relé desligado
+  digitalWrite(RELAY_PIN, LOW);
 
   Wire.begin();
 
@@ -94,11 +94,17 @@ void setup() {
     while (true);
   }
 
-  if (!apds.begin()) {
+  if (apds.init()) {
+    Serial.println("APDS-9960 iniciado com sucesso.");
+    if (apds.enableGestureSensor(true)) {
+      Serial.println("Sensor de gesto ativado.");
+    } else {
+      Serial.println("Falha ao ativar sensor de gesto.");
+    }
+  } else {
     Serial.println("Sensor APDS-9960 não detectado!");
     while (true);
   }
-  apds.enableGesture(true);
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -118,7 +124,6 @@ void setup() {
   Firebase.begin(&config, nullptr);
   Firebase.reconnectNetwork(true);
 
-  // Deleta todas as leituras anteriores no Firebase
   if (Firebase.deleteNode(firebaseData, "/leituras")) {
     Serial.println("Todas as leituras anteriores foram deletadas com sucesso.");
   } else {
@@ -132,16 +137,17 @@ void setup() {
 }
 
 void loop() {
-  uint8_t gesture = apds.readGesture();
-  if (gesture != 0) {
+  if (apds.isGestureAvailable()) {
+    int gesture = apds.readGesture();
+
     switch (gesture) {
-      case APDS9960_UP:
-      case APDS9960_LEFT:
+      case DIR_UP:
+      case DIR_LEFT:
         presencaDetectada = false;
         Serial.println("Gesto: AUSENTE (UP/LEFT)");
         break;
-      case APDS9960_DOWN:
-      case APDS9960_RIGHT:
+      case DIR_DOWN:
+      case DIR_RIGHT:
         presencaDetectada = true;
         Serial.println("Gesto: PRESENCA (DOWN/RIGHT)");
         break;
@@ -160,11 +166,7 @@ void loop() {
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
 
-  if (ligarLED) {
-    digitalWrite(RELAY_PIN, HIGH);   // Liga fan
-  } else {
-    digitalWrite(RELAY_PIN, LOW);  // Desliga fan
-  }
+  digitalWrite(RELAY_PIN, ligarLED ? LOW : HIGH);
 
   display.clearDisplay();
   display.setCursor(0, 0);
