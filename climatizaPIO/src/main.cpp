@@ -6,7 +6,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <FirebaseESP32.h> // BIBLIOTECA CORRETA PARA TOKEN LEGADO
+#include <FirebaseESP32.h>
 
 // === Wi-Fi ===
 #define WIFI_SSID "Galaxy A54 5G 3B44"
@@ -14,7 +14,7 @@
 
 // === Firebase ===
 #define DATABASE_URL "https://climatizarecife-2025-default-rtdb.firebaseio.com/"
-#define DATABASE_SECRET "CBuc7JuanfWmscKLyIAJyOBoTA0k46PzBar8FJu4" // TOKEN LEGADO
+#define DATABASE_SECRET "CBuc7JuanfWmscKLyIAJyOBoTA0k46PzBar8FJu4"
 
 // === OLED ===
 #define SCREEN_WIDTH 128
@@ -23,7 +23,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // === Sensores ===
 Adafruit_HTU21DF htu;
-SparkFun_APDS9960 apds = SparkFun_APDS9960();  // Usando a SparkFun
+SparkFun_APDS9960 apds = SparkFun_APDS9960();
 
 // === LED RGB ===
 #define RED_LED_PIN    19
@@ -31,7 +31,7 @@ SparkFun_APDS9960 apds = SparkFun_APDS9960();  // Usando a SparkFun
 #define BLUE_LED_PIN   18
 
 // === FAN / RELÉ ===
-#define RELAY_PIN 33  // Pino conectado ao módulo relé
+#define RELAY_PIN 33
 
 // === Firebase ===
 FirebaseData firebaseData;
@@ -43,6 +43,10 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", -10800, 60000);
 
 bool presencaDetectada = false;
 
+// === NOVO: Variáveis de override ===
+bool overrideControl = false;
+bool overrideTurnOn = false;
+
 void enviarDadosFirebase(float temp, float umid, bool presenca) {
   timeClient.update();
   String timestamp = timeClient.getFormattedTime();
@@ -51,21 +55,28 @@ void enviarDadosFirebase(float temp, float umid, bool presenca) {
   bool enviado = true;
 
   enviado &= Firebase.setFloat(firebaseData, path + "/temperatura", temp);
-  if (!enviado) Serial.println("Falha ao enviar temperatura: " + firebaseData.errorReason());
-
   enviado &= Firebase.setFloat(firebaseData, path + "/umidade", umid);
-  if (!enviado) Serial.println("Falha ao enviar umidade: " + firebaseData.errorReason());
-
   enviado &= Firebase.setString(firebaseData, path + "/presenca", presenca ? "presente" : "ausente");
-  if (!enviado) Serial.println("Falha ao enviar presença: " + firebaseData.errorReason());
-
   enviado &= Firebase.setString(firebaseData, path + "/hora", timestamp);
-  if (!enviado) Serial.println("Falha ao enviar hora: " + firebaseData.errorReason());
 
   if (enviado) {
     Serial.println("Dados enviados ao Firebase com sucesso!");
   } else {
-    Serial.println("Erro: nem todos os dados foram enviados ao Firebase.");
+    Serial.println("Erro ao enviar dados: " + firebaseData.errorReason());
+  }
+}
+
+void lerOverrideFirebase() {  // === NOVO: Função para ler o override ===
+  if (Firebase.getBool(firebaseData, "/control/override")) {
+    overrideControl = firebaseData.boolData();
+  } else {
+    Serial.println("Erro ao ler override: " + firebaseData.errorReason());
+  }
+
+  if (Firebase.getBool(firebaseData, "/control/turnOn")) {
+    overrideTurnOn = firebaseData.boolData();
+  } else {
+    Serial.println("Erro ao ler turnOn: " + firebaseData.errorReason());
   }
 }
 
@@ -137,9 +148,11 @@ void setup() {
 }
 
 void loop() {
+  // === NOVO: ler override antes de tudo ===
+  lerOverrideFirebase();
+
   if (apds.isGestureAvailable()) {
     int gesture = apds.readGesture();
-
     switch (gesture) {
       case DIR_UP:
       case DIR_LEFT:
@@ -160,12 +173,20 @@ void loop() {
   float temp = htu.readTemperature();
   float umid = htu.readHumidity();
 
-  bool ligarLED = (temp >= 19.0 && umid >= 40.0 && presencaDetectada);
+  bool ligarLED = false;
+
+  if (overrideControl) {  
+    // === NOVO: Se override, usa comando do Firebase
+    ligarLED = overrideTurnOn;
+    Serial.println("Override ATIVO: Forçando estado: " + String(ligarLED ? "ON" : "OFF"));
+  } else {
+    // === Mantém sua lógica original
+    ligarLED = (temp >= 19.0 && umid >= 40.0 && presencaDetectada);
+  }
 
   digitalWrite(RED_LED_PIN, ligarLED ? HIGH : LOW);
   digitalWrite(GREEN_LED_PIN, LOW);
   digitalWrite(BLUE_LED_PIN, LOW);
-
   digitalWrite(RELAY_PIN, ligarLED ? LOW : HIGH);
 
   display.clearDisplay();
@@ -185,5 +206,5 @@ void loop() {
 
   enviarDadosFirebase(temp, umid, presencaDetectada);
 
-  delay(100);
+  delay(1000);  // Melhor para evitar sobrecarga do Firebase
 }
